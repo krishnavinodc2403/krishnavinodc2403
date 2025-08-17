@@ -1,0 +1,28 @@
+name: PR Risk Check
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  risk-assessment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for git diff
+
+      - name: Print debug info
+        run: |
+          echo "Workflow triggered by: ${{ github.event_name }}"
+          echo "PR Number: ${{ github.event.pull_request.number }}"
+          echo "SHA: ${{ github.sha }}"
+          git --version
+          git fetch origin main
+          git diff origin/main...HEAD
+
+      - name: Verify model files
+        run: |
+          ls -la model/ || echo "No model directory"
+          echo "Workflow completed basic checks"
