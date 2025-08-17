@@ -1,0 +1,54 @@
+name: PR Risk Check
+on:
+  pull_request:
+    branches: [ main ]  # Only check PRs targeting main
+
+jobs:
+  risk-assessment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for git diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install gdown transformers torch
+
+      - name: Download model
+        run: |
+          mkdir -p model
+          gdown "https://drive.google.com/drive/folders/14oo7uVzdTRLFsw2Qn121Uv-KxNaHgaz1" --folder -O model/codebert-finetuned-risk-checker-v2
+
+      - name: Analyze PR risk
+        id: risk-check
+        run: |
+          # Get PR changes
+          git fetch origin main
+          PR_DIFF=$(git diff --unified=0 origin/main...HEAD)
+          
+          # Run prediction (trim to first 2000 chars to avoid token limits)
+          RISK_SCORE=$(python -c "
+          from pr_risk_model import predict_risk
+          print(predict_risk('''${PR_DIFF[:2000]}'''))
+          ")
+          echo "score=${RISK_SCORE}" >> $GITHUB_OUTPUT
+
+      - name: Flag risky PR
+        if: ${{ steps.risk-check.outputs.score == '1' }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "🚨 **Risk Alert**\n\nOur model flagged this PR as high-risk. Please review carefully!\n\n*Triggered by code changes analysis*"
+            })
